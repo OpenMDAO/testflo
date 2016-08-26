@@ -4,12 +4,10 @@ import time
 import traceback
 import inspect
 import unittest
-import pickle
 from subprocess import Popen, PIPE
 
 from types import FunctionType, ModuleType
 from six.moves import cStringIO
-from six import PY3
 
 from testflo.cover import start_coverage, stop_coverage
 
@@ -125,6 +123,43 @@ class Test(object):
 
         return result
 
+    def _run_qsub(self, queue):
+        """This runs the test using qsub in a subprocess,
+        then returns the Test object.
+        """
+
+        try:
+            cmd = ['qsub_run', '-n', str(self.nprocs),
+                   sys.executable,
+                   os.path.join(os.path.dirname(__file__), 'isolatedrun.py'),
+                   self.spec] + _get_testflo_subproc_args()
+
+            add_queue_to_env(queue)
+
+            p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+            out, err = p.communicate()
+            if self.nocapture:
+                sys.stdout.write(out)
+                sys.stderr.write(err)
+
+            os.environ['TESTFLO_QUEUE'] = ''
+
+            result = queue.get()
+
+        except:
+            # we generally shouldn't get here, but just in case,
+            # handle it so that the main process doesn't hang at the
+            # end when it tries to join all of the concurrent processes.
+            self.status = 'FAIL'
+            self.err_msg = traceback.format_exc()
+            result = self
+
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+        return result
+
     def _run_mpi(self, queue):
         """This runs the test using mpirun in a subprocess,
         then returns the Test object.
@@ -133,7 +168,6 @@ class Test(object):
         try:
             if mpirun_exe is None:
                 raise Exception("mpirun or mpiexec was not found in the system path.")
-
 
             cmd = [mpirun_exe, '-n', str(self.nprocs),
                    sys.executable,
