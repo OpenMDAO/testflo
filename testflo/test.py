@@ -32,6 +32,10 @@ elif spawn.find_executable("mpiexec") is not None:
     mpirun_exe = "mpiexec"
 
 
+if options.qsub is not None and spawn.find_executable("qsub") is not None:
+    qsub_exe = "qsub"
+
+
 def add_queue_to_env(queue):
     """Store enough info in the env to be able to create a proxy to
     the queue in a subprocess.
@@ -66,6 +70,7 @@ class Test(object):
         self.load15m = 0.0
         self.nocapture = options.nocapture
         self.isolated = options.isolated
+        self.qsub = options.qsub
         self.mpi = not options.nompi
 
         if not err_msg:
@@ -124,14 +129,19 @@ class Test(object):
         return result
 
     def _run_qsub(self, queue):
-        """This runs the test using qsub in a subprocess,
+        """This submits a job to run the test using qsub in a subprocess,
         then returns the Test object.
         """
 
+        if MPI is not None and self.mpi and self.nprocs > 0:
+            script = os.path.join(os.path.dirname(__file__), 'mpirun.py')
+        else:
+            script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
+
         try:
-            cmd = ['qsub_run', '-n', str(self.nprocs),
+            cmd = ['qsubrun.sh', '-n', str(self.nprocs),
                    sys.executable,
-                   os.path.join(os.path.dirname(__file__), 'isolatedrun.py'),
+                   script,
                    self.spec] + _get_testflo_subproc_args()
 
             add_queue_to_env(queue)
@@ -207,7 +217,9 @@ class Test(object):
             return self
 
         if queue is not None:
-            if MPI is not None and self.mpi and self.nprocs > 0:
+            if options.qsub is not None:
+                return self._run_qsub(queue)
+            elif MPI is not None and self.mpi and self.nprocs > 0:
                 return self._run_mpi(queue)
             elif self.isolated:
                 return self._run_isolated(queue)

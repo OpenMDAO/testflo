@@ -71,6 +71,8 @@ def _get_parser():
                         help="Save failed tests to failtests.in file.")
     parser.add_argument('-i', '--isolated', action='store_true', dest='isolated',
                         help="Run each test in a separate subprocess.")
+    parser.add_argument('-q', '--qsub', action='store_true', dest='qsub',
+                        help="Run each test as a separate job using `qsub`.")
     parser.add_argument('--nompi', action='store_true', dest='nompi',
                         help="Force all tests to run without MPI. This can be useful "
                              "for debugging.")
