@@ -9,7 +9,7 @@ setup(name='testflo',
         'six',
       ],
       packages=['testflo'],
-      package_data=['qsubrun.sh'],
+      package_data={'testflo': ['qsubrun.sh']},
       entry_points="""
           [console_scripts]
           testflo=testflo.main:main

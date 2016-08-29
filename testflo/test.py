@@ -133,12 +133,16 @@ class Test(object):
         then returns the Test object.
         """
 
-        if MPI is not None and self.mpi and self.nprocs > 0:
-            script = os.path.join(os.path.dirname(__file__), 'mpirun.py')
-        else:
-            script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
-
         try:
+            if MPI is not None and self.mpi and self.nprocs > 0:
+                if mpirun_exe is None:
+                    raise Exception("mpirun or mpiexec was not found in the system path.")
+                script = os.path.join(os.path.dirname(__file__), 'mpirun.py')
+            else:
+                if qsub_exe is None:
+                    raise Exception("qsub was not found in the system path.")
+                script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
+
             cmd = ['qsubrun.sh', '-n', str(self.nprocs),
                    sys.executable,
                    script,
