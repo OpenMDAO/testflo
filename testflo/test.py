@@ -4,12 +4,10 @@ import time
 import traceback
 import inspect
 import unittest
-import pickle
 from subprocess import Popen, PIPE
 
 from types import FunctionType, ModuleType
 from six.moves import cStringIO
-from six import PY3
 
 from testflo.cover import start_coverage, stop_coverage
 
@@ -32,6 +30,12 @@ if spawn.find_executable("mpirun") is not None:
     mpirun_exe = "mpirun"
 elif spawn.find_executable("mpiexec") is not None:
     mpirun_exe = "mpiexec"
+
+
+if options.qsub is not None and spawn.find_executable("qsub") is not None:
+    qsub_exe = "qsub"
+else:
+    qsub_exe = None
 
 
 def add_queue_to_env(queue):
@@ -68,6 +72,7 @@ class Test(object):
         self.load15m = 0.0
         self.nocapture = options.nocapture
         self.isolated = options.isolated
+        self.qsub = options.qsub
         self.mpi = not options.nompi
 
         if not err_msg:
@@ -125,6 +130,55 @@ class Test(object):
 
         return result
 
+    def _run_qsub(self, queue):
+        """This submits a job to run the test using qsub in a subprocess,
+        then returns the Test object.
+        """
+
+        try:
+            if MPI is not None and self.mpi and self.nprocs > 0:
+                if mpirun_exe is None:
+                    raise Exception("mpirun or mpiexec was not found in the system path.")
+                script = os.path.join(os.path.dirname(__file__), 'mpirun.py')
+
+            if qsub_exe is None:
+                raise Exception("qsub was not found in the system path.")
+            else:
+                script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
+
+            qsubrun_cmd = os.path.join(os.path.dirname(__file__), 'qsubrun.sh')
+
+            cmd = [qsubrun_cmd, '-n', str(self.nprocs),
+                   sys.executable,
+                   script,
+                   self.spec] + _get_testflo_subproc_args()
+
+            add_queue_to_env(queue)
+
+            p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+            out, err = p.communicate()
+            if self.nocapture:
+                sys.stdout.write(out)
+                sys.stderr.write(err)
+
+            os.environ['TESTFLO_QUEUE'] = ''
+
+            result = queue.get()
+
+        except:
+            # we generally shouldn't get here, but just in case,
+            # handle it so that the main process doesn't hang at the
+            # end when it tries to join all of the concurrent processes.
+            self.status = 'FAIL'
+            self.err_msg = traceback.format_exc()
+            result = self
+
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+        return result
+
     def _run_mpi(self, queue):
         """This runs the test using mpirun in a subprocess,
         then returns the Test object.
@@ -133,7 +187,6 @@ class Test(object):
         try:
             if mpirun_exe is None:
                 raise Exception("mpirun or mpiexec was not found in the system path.")
-
 
             cmd = [mpirun_exe, '-n', str(self.nprocs),
                    sys.executable,
@@ -173,7 +226,9 @@ class Test(object):
             return self
 
         if queue is not None:
-            if MPI is not None and self.mpi and self.nprocs > 0:
+            if self.qsub:
+                return self._run_qsub(queue)
+            elif MPI is not None and self.mpi and self.nprocs > 0:
                 return self._run_mpi(queue)
             elif self.isolated:
                 return self._run_isolated(queue)
