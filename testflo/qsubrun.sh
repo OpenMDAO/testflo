@@ -3,17 +3,8 @@
 # usage: qsubrun [-n #] python [isolatedrun.py|mpirun.py] [testspec] [host port key]
 #
 
-echo
-echo
-echo "qsubrun.sh received command:"
-echo $*
-echo
-echo
-
-
 # defaults
 procs=1
-mpi=0
 
 # process args
 while [[ $# > 0 ]]; do
@@ -41,13 +32,6 @@ name=${testspec##*\.}
 
 jobfile="$name-$BASHPID.job"
 
-echo
-echo
-echo "jobfile: $jobfile"
-echo "numproc: $procs"
-echo "mpi: $mpi"
-echo "name: $name"
-echo "command: $cmd"
 
 echo "#!/bin/bash"         >$jobfile
 echo "#$ -N $name"        >>$jobfile
@@ -56,7 +40,7 @@ echo "#$ -S /bin/bash"    >>$jobfile
 echo "#$ -V"              >>$jobfile
 if (( $procs > 1 )) ; then
     echo "#$ -pe ompi $procs" >>$jobfile
-    echo "/hx/software/apps/openmpi/1.10.2/64bit/gnu/bin/mpirun -n \$NSLOTS $cmd" >>$jobfile
+    echo "mpirun -n \$NSLOTS $cmd" >>$jobfile
 else
     echo "$cmd" >>$jobfile
 fi
