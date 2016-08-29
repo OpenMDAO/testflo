@@ -34,6 +34,8 @@ elif spawn.find_executable("mpiexec") is not None:
 
 if options.qsub is not None and spawn.find_executable("qsub") is not None:
     qsub_exe = "qsub"
+else:
+    qsub_exe = None
 
 
 def add_queue_to_env(queue):

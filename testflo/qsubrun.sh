@@ -1,38 +1,24 @@
 #!/bin/bash
 #
-# usage: qsubrun [-n #] python [isolatedrun.py|mpirun.py] [testspec] [host port key]
+# usage: qsubrun -n # python script testspec host port key
 #
 
-# defaults
-procs=1
-
+#
 # process args
-while [[ $# > 0 ]]; do
-    arg="$1"
+#
+procs=$2
+cmd=${@:3}
+testspec=$5
 
-    case $arg in
-        -n)
-            procs=$2
-            echo "numproc: $procs"
-            shift
-            shift
-            cmd=${@:1}
-            echo "cmd: $cmd"
-            testspec=$3
-            echo "testspec: $testspec"
-            ;;
-        *)
-            shift
-            ;;
-    esac
-done
-
-
+#
+# build job name from testspec
+#
 name=${testspec##*\.}
-
 jobfile="$name-$BASHPID.job"
 
-
+#
+# build job script
+#
 echo "#!/bin/bash"         >$jobfile
 echo "#$ -N $name"        >>$jobfile
 echo "#$ -cwd"            >>$jobfile
@@ -45,8 +31,13 @@ else
     echo "$cmd" >>$jobfile
 fi
   
-
+#
+# submit job using qsub
+#
 cat $jobfile
 qsub $jobfile
 
+#
+# clean up
+#
 #rm -f $jobfile
