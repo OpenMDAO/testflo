@@ -143,7 +143,9 @@ class Test(object):
                     raise Exception("qsub was not found in the system path.")
                 script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
 
-            cmd = ['qsubrun.sh', '-n', str(self.nprocs),
+            qsubrun_cmd = os.path.join(os.path.dirname(__file__), 'qsubrun.sh')
+
+            cmd = [qsubrun_cmd, '-n', str(self.nprocs),
                    sys.executable,
                    script,
                    self.spec] + _get_testflo_subproc_args()
