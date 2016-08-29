@@ -140,9 +140,10 @@ class Test(object):
                 if mpirun_exe is None:
                     raise Exception("mpirun or mpiexec was not found in the system path.")
                 script = os.path.join(os.path.dirname(__file__), 'mpirun.py')
+
+            if qsub_exe is None:
+                raise Exception("qsub was not found in the system path.")
             else:
-                if qsub_exe is None:
-                    raise Exception("qsub was not found in the system path.")
                 script = os.path.join(os.path.dirname(__file__), 'isolatedrun.py')
 
             qsubrun_cmd = os.path.join(os.path.dirname(__file__), 'qsubrun.sh')
@@ -225,7 +226,7 @@ class Test(object):
             return self
 
         if queue is not None:
-            if options.qsub is not None:
+            if self.qsub:
                 return self._run_qsub(queue)
             elif MPI is not None and self.mpi and self.nprocs > 0:
                 return self._run_mpi(queue)
