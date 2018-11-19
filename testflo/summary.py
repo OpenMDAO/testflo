@@ -66,15 +66,6 @@ class ResultSummary(object):
         write("\n\nPassed:  %d\nFailed:  %d\nSkipped: %d\n" %
                             (oks, len(fails), len(skips)))
 
-        if fails:
-            sys_info = platform.uname()
-            write("Please include the OS, CPU and Python information if "
-                  "you are going to report the failures.")
-            write("\nOS:  %s\nCPU:  %s\nPython:  %s\n" %
-                  ("%s %s" % (sys_info.system, sys_info.version),
-                   "%s %s" % (sys_info.machine, sys_info.processor),
-                   sys.version))
-
         wallclock = time.time() - self._start_time
 
         s = "" if total == 1 else "s"
@@ -84,3 +75,12 @@ class ResultSummary(object):
             procstr = " using %d processes" % self.options.num_procs
         write("\n\nRan %d test%s%s\nWall clock time:   %s\n\n" %
                       (total, s, procstr, elapsed_str(wallclock)))
+
+        if fails:
+            sys_info = platform.uname()
+            write("\nYour system's specifications are shown below "
+                  "to facilitate reporting of failures.")
+            write("\n\nOS:     %s\nCPU:    %s\nPython: %s\n\n" %
+                  ("%s | %s" % (sys_info.system, sys_info.version),
+                   "%s | %s" % (sys_info.machine, sys_info.processor),
+                   sys.version))
