@@ -1,4 +1,5 @@
 
+import platform
 import sys
 import time
 
@@ -64,6 +65,15 @@ class ResultSummary(object):
 
         write("\n\nPassed:  %d\nFailed:  %d\nSkipped: %d\n" %
                             (oks, len(fails), len(skips)))
+
+        if fails:
+            sys_info = platform.uname()
+            write("Please include the OS, CPU and Python information if "
+                  "you are going to report the failures.")
+            write("\nOS:  %s\nCPU:  %s\nPython:  %s\n" %
+                  ("%s %s" % (sys_info.system, sys_info.version),
+                   "%s %s" % (sys_info.machine, sys_info.processor),
+                   sys.version))
 
         wallclock = time.time() - self._start_time
 
