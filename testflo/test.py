@@ -319,12 +319,6 @@ class Test(object):
                             status, expected2 = _try_call(getattr(parent, funcname))
                         self.err_msg = errstream.getvalue()
                     else: # use unittest code to run the test and handle subtests
-                        # if tcase_setup:
-                        #     status, expected = _try_call(tcase_setup)
-                        #     if status != 'OK':
-                        #         done = True
-                        #         # tcase_teardown = None
-
                         result= UnitTestResult()
                         parent.run(result)
                         tname, data = result._tests.popitem()
@@ -352,9 +346,6 @@ class Test(object):
                     self.status = status
                     self.memory_usage = get_memory_usage()
                     self.expected_fail = expected or expected2 or expected3
-
-                    # if tcase_teardown:
-                    #     _try_call(tcase_teardown)
 
                     if mod_teardown:
                         _try_call(mod_teardown)
