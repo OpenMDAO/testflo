@@ -1,6 +1,14 @@
 # RELEASE NOTES
 
 ***********************
+# testflo version 1.4.20
+June 27, 2025
+
+- Improved functionality of the -f option [#123](https://github.com/OpenMDAO/testflo/pull/123)
+- Added a workflow to publish to PyPi when a release is made on GitHub [#122](https://github.com/OpenMDAO/testflo/pull/122)
+
+
+***********************
 # testflo version 1.4.19
 July 29, 2024
 
