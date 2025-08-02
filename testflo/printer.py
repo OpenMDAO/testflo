@@ -43,7 +43,7 @@ class ResultPrinter(object):
 
         if (self.verbose == 0 and (result.err_msg and show_msg)) or self.verbose > 0:
             if result.mpi and result.nprocs > 0:
-                run_type = '(mpi) '
+                run_type = f'(mpi {result.nprocs}) '
             elif result.isolated:
                 run_type = '(isolated) '
             else:
