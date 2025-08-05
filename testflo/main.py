@@ -59,7 +59,11 @@ def dryrun(input_iter):
         for test in tests:
             if test.status is None:
                 test.status = 'OK'
-            print(test.spec)
+            if test.nprocs > 1:
+                spec = f"{test.spec}  # mpi, nprocs={test.nprocs}"
+            else:
+                spec = test.spec
+            print(spec)
             yield test
 
 
