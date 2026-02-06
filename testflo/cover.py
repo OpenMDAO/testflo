@@ -28,12 +28,16 @@ def setup_coverage(options):
     data_file = os.path.join(cover_dir, '.coverage')
     cfg_file = os.path.join(cover_dir, '.coveragerc')
 
-    cov = coverage.Coverage(
-        config_file=cfg_file,
-        data_file=data_file,
-        data_suffix=True,
-        branch=options.cover_branch,
-    )
+    kwargs = {
+        'data_file': data_file,
+        'data_suffix': True,
+        'branch': options.cover_branch,
+    }
+
+    if os.path.isfile(cfg_file):
+        kwargs['config_file'] = cfg_file
+
+    cov = coverage.Coverage(**kwargs)
 
     cov.config.ignore_errors = True
 
