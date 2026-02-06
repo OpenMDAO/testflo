@@ -61,3 +61,7 @@ class SkippedTestCase2(unittest.TestCase):
 
     def test_4(self):
         self.fail("This test should have been skipped.")
+
+
+if __name__ == '__main__':
+    unittest.main()
