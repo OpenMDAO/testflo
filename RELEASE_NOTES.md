@@ -1,6 +1,13 @@
 # RELEASE NOTES
 
 ***********************
+# testflo version 1.4.21
+February 6, 2026
+
+- Fixed a double initialization issue when coverage was active [#128](https://github.com/OpenMDAO/testflo/pull/128)
+
+
+***********************
 # testflo version 1.4.20
 June 27, 2025
 
