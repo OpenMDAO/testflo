@@ -3,146 +3,99 @@ Methods to provide code coverage using coverage.py.
 """
 import os
 import sys
-import shutil
 import webbrowser
 
 try:
     import coverage
-    from coverage.config import HandyConfigParser
+    from coverage.collector import Collector
 except ImportError:
     coverage = None
-else:
-    coverage.process_startup()
-
-
-# use to hold a global coverage obj
-_coverobj = None
-
-def _to_ini(lst):
-    if lst:
-        return ','.join(lst)
-    return ''
-
-
-def _write_temp_config(options, rcfile):
-    """
-    Read any .coveragerc file if it exists, and override parts of it then generate our temp config.
-
-    Parameters
-    ----------
-    options : cmd line options
-        Options from the command line parser.
-    rcfile : str
-        The name of our temporary coverage config file.
-    """
-    tmp_cfg = {
-        'run': {
-            'branch': False,
-            'parallel': True,
-            'concurrency': 'multiprocessing',
-        },
-        'report': {
-            'ignore_errors': True,
-            'skip_empty': True,
-            'sort': '-cover',
-        },
-        'html': {
-            'skip_empty': True,
-        }
-    }
-
-    if options.coverpkgs:
-        tmp_cfg['run']['source_pkgs'] = _to_ini(options.coverpkgs)
-
-    if options.cover_omits:
-        tmp_cfg['run']['omit'] = _to_ini(options.cover_omits)
-        tmp_cfg['report']['omit'] = _to_ini(options.cover_omits)
-
-    cfgparser = HandyConfigParser(our_file=True)
-
-    if os.path.isfile('.coveragerc'):
-        cfgparser.read(['.coveragerc'])
-
-    cfgparser.read_dict(tmp_cfg)
-
-    with open(rcfile, 'w') as f:
-        cfgparser.write(f)
 
 
 def setup_coverage(options):
-    global _coverobj
-    if _coverobj is None and (options.coverage or options.coveragehtml):
-        if not coverage:
-            raise RuntimeError("coverage has not been installed.")
-        if not options.coverpkgs:
-            raise RuntimeError("No packages specified for coverage. "
-                               "Use the --coverpkg option to add a package.")
-        oldcov = os.path.join(os.getcwd(), '.coverage')
-        if os.path.isfile(oldcov):
-            os.remove(oldcov)
-        covdir = os.path.join(os.getcwd(), '_covdir')
-        if os.path.isdir('_covdir'):
-            shutil.rmtree('_covdir')
-        os.mkdir('_covdir')
-        os.environ['COVERAGE_RUN'] = 'true'
-        os.environ['COVERAGE_RCFILE'] = rcfile = os.path.join(covdir, '_coveragerc_')
-        os.environ['COVERAGE_FILE'] = covfile = os.path.join(covdir, '.coverage')
-        os.environ['COVERAGE_PROCESS_START'] = rcfile
-        _write_temp_config(options, rcfile)
-        _coverobj = coverage.Coverage(data_file=covfile, data_suffix=True, config_file=rcfile)
-    return _coverobj
+    """
+    Programmatically initializes coverage for the current process.
+    Ensures absolute paths for temp-dir safety and avoids double-init.
+    """
+    if not (options.coverage or options.coveragehtml):
+        return None
 
-def start_coverage():
-    if _coverobj:
-        _coverobj.start()
+    # Prevent double-initialization
+    if Collector._collectors:
+        return None
 
-def stop_coverage():
-    if _coverobj:
-        _coverobj.stop()
+    cover_dir = options.cover_dir or os.getcwd()
+    data_file = os.path.join(cover_dir, '.coverage')
+    cfg_file = os.path.join(cover_dir, '.coveragerc')
 
-def save_coverage():
-    if _coverobj:
-        _coverobj.save()
+    cov = coverage.Coverage(
+        config_file=cfg_file,
+        data_file=data_file,
+        data_suffix=True,
+        branch=options.cover_branch,
+    )
 
-def finalize_coverage(options):
-    if _coverobj and options.coverpkgs:
-        rank = 0
-        if not options.nompi:
-            try:
-                from mpi4py import MPI
-                rank = MPI.COMM_WORLD.rank
-            except ImportError:
-                pass
-        if rank == 0:
-            from testflo.util import find_files, find_module
-            excl = lambda n: (n.startswith('test_') and n.endswith('.py')) or \
-                             n.startswith('__init__.')
-            dirs = []
-            for n in options.coverpkgs:
-                if os.path.isdir(n):
-                    dirs.append(n)
-                else:
-                    path = find_module(n)
-                    if path is None:
-                        raise RuntimeError("Can't find module %s" % n)
-                    dirs.append(os.path.dirname(path))
+    cov.config.ignore_errors = True
 
-            morfs = list(find_files(dirs, match='*.py', exclude=excl))
+    if sys.version_info >= (3, 13):
+        cov.set_option("run:core", "sysmon")
 
-            _coverobj.combine()
-            _coverobj.save()
+    if options.coverpkgs:
+        cov.set_option("run:source", options.coverpkgs)
+    if options.cover_omits:
+        omits = cov.get_option("run:omit")
+        if omits:
+            omits.extend(options.cover_omits)
+        else:
+            omits = options.cover_omits
+        cov.set_option("run:omit", omits)
 
-            if options.coverage:
-                _coverobj.report(morfs=morfs)
-            else:
-                dname = '_html'
-                _coverobj.html_report(morfs=morfs, directory=dname)
-                outfile = os.path.join(os.getcwd(), dname, 'index.html')
+    cov.set_option("run:disable_warnings", ["module-not-imported", "no-data-collected",
+                   "couldnt-parse"])
+    cov.set_option("report:ignore_errors", True)
+    cov.set_option("report:sort", "-cover")
+    cov.set_option("report:exclude_lines", [
+        "pragma: no cover",
+        "if __name__ == .__main__.:",
+        "raise NotImplementedError",
+        "def __repr__",
+    ])
 
-                if sys.platform == 'darwin':
-                    os.system('open %s' % outfile)
-                else:
-                    webbrowser.get().open(outfile)
+    return cov
 
-            shutil.copy(_coverobj.get_data().data_filename(),
-                        os.path.join(os.getcwd(), '.coverage'))
+
+def finalize_coverage(options, cov):
+    """
+    Combines all parallel coverage files and generates an HTML report.
+    """
+    if cov is None:
+        return
+
+    cov.save()
+
+    data_dir = options.cover_dir
+
+    # Combine all coverage files found in the data_dir
+    try:
+        cov.combine(data_paths=[data_dir])
+    except coverage.exceptions.CoverageException as e:
+        print(f"Combining coverage files failed: {e}", file=sys.stderr)
+        return
+
+    if options.coverage:
+        print("\n--- Coverage Summary ---")
+        cov.report(ignore_errors=True, skip_empty=True)
+
+    if options.coveragehtml:
+        html_dir = os.path.join(data_dir, 'htmlcov')
+        cov.html_report(directory=html_dir, ignore_errors=True, skip_empty=True,
+                        show_contexts=options.dyn_contexts)
+        index_file = os.path.join(html_dir, 'index.html')
+        if sys.platform == 'darwin':
+            os.system('open %s' % index_file)
+        else:
+            webbrowser.get().open(index_file)
+
+        print(f"\nHTML report generated at: {index_file}")
+
+    return cov

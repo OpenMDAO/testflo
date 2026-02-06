@@ -61,7 +61,7 @@ class TestDiscoverer(object):
         # process so that we can execute the module or class level setup/teardown
         # only once while impacting all of the tests in that group.
         new_tcase_groups = []
-        for tcase, tests in self._tcase_fixture_groups.items():
+        for tests in self._tcase_fixture_groups.values():
             tests = sorted(tests, key=lambda t: t.spec)
 
             # mark the first and last tests so that we know when to

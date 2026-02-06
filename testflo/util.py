@@ -94,7 +94,13 @@ def _get_parser():
     parser.add_argument('--cover-omit', action='append', dest='cover_omits',
                         metavar='FILE',
                         help="Add a file name pattern to remove it from coverage.")
-
+    parser.add_argument('--cover-branch', action='store_true', dest='cover_branch',
+                        help="Enable branch coverage (more detailed but slower). Default is False.")
+    parser.add_argument('--cover-dir', action='store', dest='cover_dir',
+                        metavar='DIR', help="Specify the coverage dir to use. Default is the "
+                        "current working directory.")
+    parser.add_argument('--cover-contexts', action='store_true', dest='dyn_contexts',
+                        help="Record which tests hit which lines (increases overhead)."),
     parser.add_argument('-b', '--benchmark', action='store_true', dest='benchmark',
                         help='Specifies that benchmarks are to be run rather '
                              'than tests, so only files starting with "benchmark_" '
@@ -152,31 +158,46 @@ def _get_parser():
     return parser
 
 
-def _options2args():
-    """Gets the testflo args that should be used in subprocesses."""
+def _options2args(options):
+    """Gets the testflo args that should be passed to subprocesses."""
 
-    cmdset = set([
-      '--nocapture',
-      '-s',
-      '--coverpkg',
-      '--coverage',
-      '--coverage-html',
-      '--cover-omit',
+    store_args = set([
+      'coverage_dir',
     ])
 
+    multi_args = set([
+      'coverpkg',
+      'cover_omits',
+    ])
+
+    store_true_args = set([
+      'coverage',
+      'coveragehtml',
+      'nocapture',
+      'cover_branch',
+      'dyn_contexts',
+    ])
+
+    all_args = store_args | store_true_args | multi_args
+
+    parser = _get_parser()
+    dest_to_flags = {
+        action.dest: (action.option_strings, action.default) for action in parser._actions
+            if action.dest in all_args
+        }
+
     keep = []
-    i = 0
-    args = sys.argv[1:]
-    argslen = len(args)
-    while i < argslen:
-        arg = args[i]
-        if arg.split('=',1)[0] in cmdset:
-            keep.append(arg)
-            if ((arg.startswith('--coverpkg') or arg.startswith('--cover-omit'))
-                        and '=' not in arg):
-                i += 1
-                keep.append(args[i])
-        i += 1
+    for dest, (flags, default) in dest_to_flags.items():
+        opt = getattr(options, dest)
+        if dest in store_args:
+            if opt != default:
+                keep.append(f"{flags[0]}={opt}")
+        elif dest in multi_args:
+            if opt:
+                for oparg in opt:
+                    keep.append(f"{flags[0]}={oparg}")
+        elif dest in store_true_args and opt:
+            keep.append(flags[0])
 
     return keep
 

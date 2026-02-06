@@ -16,8 +16,6 @@ from io import StringIO
 from unittest import TestCase, SkipTest
 from unittest.case import _UnexpectedSuccess
 
-from testflo.cover import start_coverage, stop_coverage
-
 from testflo.util import get_module, ismethod, get_memory_usage, \
                          get_testpath, _options2args, _testing_path
 from testflo.utresult import UnitTestResult
@@ -47,7 +45,12 @@ class FakeComm(object):
 
 
 @contextmanager
-def testcontext(test):
+def testcontext(test, cov):
+    if cov is not None:
+        cov.start()
+        if test.options.dyn_contexts:
+            cov.switch_context(test.spec)
+
     global _testing_path
     old_sys_path = sys.path
 
@@ -62,6 +65,8 @@ def testcontext(test):
         test.status = 'FAIL'
         test.err_msg = traceback.format_exc()
     finally:
+        if cov is not None:
+            cov.stop()
         sys.path = old_sys_path
         if 'TESTFLO_SPEC' in os.environ:
             del os.environ['TESTFLO_SPEC']
@@ -113,7 +118,7 @@ class Test(object):
         """Get the test's module, testcase (if any), function name,
         N_PROCS (for mpi tests) and ISOLATED and set our attributes.
         """
-        with testcontext(self):
+        with testcontext(self, None):
             try:
                 mod, self.tcasename, self.funcname = _parse_test_path(self.spec)
                 self.modpath = mod.__name__
@@ -203,7 +208,7 @@ class Test(object):
             cmd =  [mpirun_exe, '-n', str(self.nprocs),
                    sys.executable,
                    os.path.join(os.path.dirname(__file__), 'mpirun.py'),
-                   self.spec] + _options2args()
+                   self.spec] + _options2args(self.options)
 
             result = self._run_subproc(cmd, queue, os.environ)
 
@@ -220,7 +225,7 @@ class Test(object):
 
         return result
 
-    def run(self, queue=None):
+    def run(self, queue=None, cov=None):
         """Runs the test, assuming status is not already known."""
         if self.status is not None:
             # premature failure occurred (or dry run), just return
@@ -238,7 +243,7 @@ class Test(object):
         elif self.options.isolated:
             return self._run_isolated(queue)
 
-        with testcontext(self):
+        with testcontext(self, cov):
             testpath, _ = get_testpath(self.spec)
             _, mod = get_module(testpath)
 
@@ -284,8 +289,6 @@ class Test(object):
                 old_out = sys.stdout
                 sys.stdout = outstream
                 sys.stderr = errstream
-
-                start_coverage()
 
                 self.start_time = time.perf_counter()
 

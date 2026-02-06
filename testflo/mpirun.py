@@ -6,12 +6,6 @@ to run an MPI test.
 """
 
 if __name__ == '__main__':
-    try:
-        import coverage
-    except ImportError:
-        pass
-    else:
-        coverage.process_startup()
 
     import sys
     import os
@@ -24,6 +18,7 @@ if __name__ == '__main__':
     from testflo.test import Test
     from testflo.qman import get_client_queue
     from testflo.options import get_options
+    from testflo.cover import setup_coverage
 
     exitcode = 0  # use 0 for exit code of all ranks != 0 because otherwise,
                   # MPI will terminate other processes
@@ -32,13 +27,19 @@ if __name__ == '__main__':
     os.environ['TESTFLO_QUEUE'] = ''
 
     options = get_options()
+    test = None
+
+    if options.coverage or options.coveragehtml:
+        cov = setup_coverage(options)
+    else:
+        cov = None
 
     try:
         try:
             comm = MPI.COMM_WORLD
             test = Test(sys.argv[1], options)
             test.nocapture = True # so we don't lose stdout
-            test.run()
+            test.run(cov=cov)
         except:
             print(traceback.format_exc())
             test.status = 'FAIL'
@@ -71,3 +72,6 @@ if __name__ == '__main__':
 
         if comm.rank == 0:
             queue.put(test)
+
+        if cov is not None:
+            cov.save()

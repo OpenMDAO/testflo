@@ -8,43 +8,45 @@ import os
 
 from multiprocessing import Queue, Process
 
-from testflo.cover import save_coverage
-from testflo.test import Test
-from testflo.options import get_options
+from testflo.cover import setup_coverage
 
 
-def worker(test_queue, done_queue, subproc_queue, worker_id):
-    """This is used by concurrent test processes. It takes a test
+def worker(test_queue, done_queue, subproc_queue, worker_id, options):
+    """This is used by concurrent test processes. It takes a Test object
     off of the test_queue, runs it, then puts the Test object
     on the done_queue.
     """
+
+    cov = setup_coverage(options)
+
     test_count = 0
-    for tests in iter(test_queue.get, 'STOP'):
+    try:
+        for tests in iter(test_queue.get, 'STOP'):
 
-        done_tests = []
-        for test in tests:
-            try:
-                test_count += 1
-                done_tests.append(test.run(subproc_queue))
-            except:
-                # we generally shouldn't get here, but just in case,
-                # handle it so that the main process doesn't hang at the
-                # end when it tries to join all of the concurrent processes.
-                done_tests.append(test)
+            done_tests = []
+            for test in tests:
+                try:
+                    test_count += 1
+                    done_tests.append(test.run(subproc_queue, cov=cov))
+                except:
+                    # we generally shouldn't get here, but just in case,
+                    # handle it so that the main process doesn't hang at the
+                    # end when it tries to join all of the concurrent processes.
+                    done_tests.append(test)
 
-        done_queue.put(done_tests)
-
-    # don't save anything unless we actually ran a test
-    if test_count > 0:
-        save_coverage()
+            done_queue.put(done_tests)
+    finally:
+        if cov:
+            cov.save()
 
 
 class TestRunner(object):
 
-    def __init__(self, options, subproc_queue):
+    def __init__(self, options, subproc_queue, cov):
         self.stop = options.stop
         self.pre_announce = options.pre_announce
         self._queue = subproc_queue
+        self.cov = cov
 
     def get_iter(self, input_iter):
         """Run tests serially."""
@@ -55,7 +57,7 @@ class TestRunner(object):
                 if self.pre_announce:
                     print("    about to run %s " % test.short_name(), end='')
                     sys.stdout.flush()
-                result = test.run(self._queue)
+                result = test.run(self._queue, cov=self.cov)
                 yield result
                 if self.stop:
                     if (result.status == 'FAIL' and not result.expected_fail) or (
@@ -65,16 +67,14 @@ class TestRunner(object):
             if stop:
                 break
 
-        save_coverage()
-
 
 class ConcurrentTestRunner(TestRunner):
     """TestRunner that uses the multiprocessing package
     to execute tests concurrently.
     """
 
-    def __init__(self, options, subproc_queue):
-        super(ConcurrentTestRunner, self).__init__(options, subproc_queue)
+    def __init__(self, options, subproc_queue, cov):
+        super(ConcurrentTestRunner, self).__init__(options, subproc_queue, cov)
         self.num_procs = options.num_procs
 
         # only do concurrent stuff if num_procs > 1
@@ -84,7 +84,6 @@ class ConcurrentTestRunner(TestRunner):
             # Create queues
             self.task_queue = Queue()
             self.done_queue = Queue()
-
             self.procs = []
 
             # Start worker processes
@@ -93,7 +92,7 @@ class ConcurrentTestRunner(TestRunner):
                 self.procs.append(Process(target=worker,
                                           args=(self.task_queue,
                                                 self.done_queue, subproc_queue,
-                                                worker_id)))
+                                                worker_id, options)))
 
             for proc in self.procs:
                 proc.start()

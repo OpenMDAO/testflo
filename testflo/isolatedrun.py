@@ -5,12 +5,6 @@ This is meant to be executed as a subprocess of testflo.
 """
 
 if __name__ == '__main__':
-    try:
-        import coverage
-    except ImportError:
-        coverage = None
-    else:
-        coverage.process_startup()
 
     import sys
     import os
@@ -19,27 +13,31 @@ if __name__ == '__main__':
     from testflo.test import Test
     from testflo.qman import get_client_queue
     from testflo.options import get_options
+    from testflo.cover import setup_coverage
 
     queue = get_client_queue()
     os.environ['TESTFLO_QUEUE'] = ''
 
     options = get_options()
+    test = None
+
+    if options.coverage or options.coveragehtml:
+        cov = setup_coverage(options)
+    else:
+        cov = None
 
     try:
-        try:
-            test = Test(sys.argv[1], options)
-            test.nocapture = True # so we don't lose stdout
-            test.run()
-        except:
-            print(traceback.format_exc())
-            test.status = 'FAIL'
-            test.err_msg = traceback.format_exc()
-
+        test = Test(sys.argv[1], options)
+        test.nocapture = True # so we don't lose stdout
+        test.run(cov=cov)
     except:
-        test.err_msg = traceback.format_exc()
         test.status = 'FAIL'
+        test.err_msg = traceback.format_exc()
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
 
-    sys.stdout.flush()
-    sys.stderr.flush()
+        queue.put(test)
 
-    queue.put(test)
+        if cov is not None:
+            cov.save()

@@ -29,8 +29,6 @@ import sys
 import time
 import warnings
 import multiprocessing
-import atexit
-import shutil
 
 from fnmatch import fnmatch, fnmatchcase
 
@@ -43,12 +41,15 @@ from testflo.deprecations import DeprecationsReport
 from testflo.duration import DurationSummary
 from testflo.discover import TestDiscoverer
 from testflo.filters import TimeFilter, FailFilter
+from testflo.cover import setup_coverage, finalize_coverage
 
 from testflo.util import read_config_file, read_test_file
 from testflo.options import get_options
 from testflo.qman import get_server_queue
-
-options = get_options()
+try:
+    import coverage
+except ImportError:
+    coverage = None
 
 
 def dryrun(input_iter):
@@ -128,17 +129,8 @@ def main(args=None):
     # create one if it doesn't exist
     homedir = os.path.expanduser('~')
     rcfile = os.path.join(homedir, '.testflo')
-    if not os.path.isfile(rcfile):
-        with open(rcfile, 'w') as f:
-            f.write("""[testflo]
-skip_dirs=site-packages,
-    dist-packages,
-    __pycache__,
-    build,
-    _build,
-    contrib
-""")
-    read_config_file(rcfile, options)
+    if os.path.isfile(rcfile):
+        read_config_file(rcfile, options)
     if options.cfg:
         read_config_file(options.cfg, options)
 
@@ -159,8 +151,14 @@ skip_dirs=site-packages,
     if not tests:
         tests = [os.getcwd()]
 
+    always_skip = {'site-packages', 'dist-packages', '__pycache__', 'build', '_build',
+                   '.pixi'}
+
     def dir_exclude(d):
         base = os.path.basename(d)
+        if base in always_skip:
+            return True
+
         for skip in options.skip_dirs:
             if fnmatch(base, skip):
                 return True
@@ -170,21 +168,21 @@ skip_dirs=site-packages,
     os.environ['TESTFLO_RUNNING'] = '1'
 
     if options.coverage or options.coveragehtml:
-        os.environ['TESTFLO_MAIN_PID'] = str(os.getpid())
-        # some coverage files aren't written until atexit of their processes, so put our finalize
-        # routine in atexit before their Coverage._atexit methods are registered so ours will be
-        # executed *after* theirs.
-        def _finalize():
-            if os.getpid() == int(os.environ.get('TESTFLO_MAIN_PID', '0')):
-                from testflo.cover import finalize_coverage
-                finalize_coverage(options)
-                # clean up the temporary dir where we store the interim coverage files from all
-                # of the processes.
-                if os.path.isdir('_covdir'):
-                    shutil.rmtree('_covdir')
-        atexit.register(_finalize)
-        from testflo.cover import setup_coverage
-        setup_coverage(options)
+        cov_dir = options.cover_dir or os.getcwd()
+        options.cover_dir = os.path.abspath(cov_dir)
+        if options.cover_omits is None:
+            options.cover_omits = []
+        options.cover_omits.append('*/testflo/*')
+
+        if not coverage:
+            raise RuntimeError("coverage has not been installed.")
+        if not options.coverpkgs:
+            raise RuntimeError("No packages specified for coverage. "
+                               "Use the --coverpkg option to add a package.")
+
+        cov = setup_coverage(options)
+    else:
+        cov = None
 
     if options.noreport:
         report_file = open(os.devnull, 'a')
@@ -235,7 +233,7 @@ skip_dirs=site-packages,
             if options.pre_announce:
                 options.num_procs = 1
 
-            pipeline.append(ConcurrentTestRunner(options, queue).get_iter)
+            pipeline.append(ConcurrentTestRunner(options, queue, cov=cov).get_iter)
 
             if options.show_deprecations or options.deprecations_report:
                 pipeline.append(DeprecationsReport(options).get_iter)
@@ -273,6 +271,8 @@ skip_dirs=site-packages,
 
         if manager is not None:
             manager.shutdown()
+
+    finalize_coverage(options, cov)
 
     return retval
 
