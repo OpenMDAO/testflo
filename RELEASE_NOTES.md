@@ -1,6 +1,13 @@
 # RELEASE NOTES
 
 ***********************
+# testflo version 1.4.22
+February 6, 2026
+
+- Previous release broke for projects that don't have a .coveragerc [#130](https://github.com/OpenMDAO/testflo/pull/130)
+
+
+***********************
 # testflo version 1.4.21
 February 6, 2026
 
